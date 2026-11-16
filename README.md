@@ -1,4 +1,4 @@
-# TIA LAD Generator
+﻿# TIA LAD Generator
 
 用 **西门子 TIA Portal Openness** 自动生成梯形图（LAD）程序块并导入 TIA Portal V21 的工具链。
 
@@ -26,6 +26,15 @@
 | TON 定时器 | `Part Name="TON"` + `Instance`(TON_TIME) + `TemplateValue time_type` | ✅ |
 | 并行分支（OR） | `Openbranch` | ⚠️ 未验证，本项目用双线圈/S-R 规避 |
 | 字/整数运算、MOVE、比较 | — | ⚠️ 未验证 |
+
+## Web HMI（零运行时）
+
+`hmi/` 下是一个不依赖 WinCC 运行时的网页 HMI：
+
+- 后端 `server.py`：OPC UA 连 Kepware（asyncua），带 DEMO 回退
+- 前端 `index.html`：启动/急停/复位按钮、11 步进度、10 路使能灯、6 路位置灯、心跳
+- 启动：`python hmi\server.py`，浏览器打开 http://127.0.0.1:8080
+- 连不上 Kepware 时自动进入 DEMO 模式（页面会显示）
 
 ## 目录
 
@@ -68,3 +77,4 @@ python tools\gen_main_v3.py
 ## License
 
 MIT
+

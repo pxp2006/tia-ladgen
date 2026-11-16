@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>装袋机 HMI</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #1a2129; --line: #2b3540;
+    --txt: #e6edf3; --dim: #8b98a5;
+    --green: #2ea043; --red: #da3633; --yellow: #d29922; --blue: #388bfd;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--txt);
+         font-family: "Segoe UI", "Microsoft YaHei", sans-serif; }
+  header { display: flex; align-items: center; gap: 16px;
+           padding: 14px 22px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 20px; margin: 0; font-weight: 600; letter-spacing: 1px; }
+  .badge { padding: 4px 12px; border-radius: 20px; font-size: 13px;
+           border: 1px solid var(--line); color: var(--dim); }
+  .badge.ok { color: #3fb950; border-color: #238636; background: #12261a; }
+  .badge.demo { color: #d29922; border-color: #9e6a03; background: #2a1f08; }
+  .badge.err { color: #f85149; border-color: #8e1519; background: #2a0f10; }
+  main { padding: 18px 22px 40px; display: grid; gap: 18px;
+         grid-template-columns: 340px 1fr; }
+  .card { background: var(--panel); border: 1px solid var(--line);
+          border-radius: 10px; padding: 16px; }
+  .card h2 { font-size: 14px; color: var(--dim); font-weight: 600;
+             margin: 0 0 14px; letter-spacing: 1px; }
+  .btnrow { display: flex; gap: 12px; }
+  .bigbtn { flex: 1; padding: 22px 0; border-radius: 10px; border: 2px solid var(--line);
+            background: #10171e; color: var(--txt); font-size: 18px; font-weight: 700;
+            cursor: pointer; user-select: none; transition: .08s; }
+  .bigbtn:active { transform: scale(.97); }
+  .bigbtn.start { border-color: var(--green); }
+  .bigbtn.start:active { background: #16351f; }
+  .bigbtn.stop { border-color: var(--red); }
+  .bigbtn.stop:active { background: #3a1414; }
+  .bigbtn.reset { border-color: var(--yellow); }
+  .bigbtn.reset:active { background: #3a2c0c; }
+  .steps { display: grid; grid-template-columns: repeat(11, 1fr); gap: 6px; }
+  .step { padding: 10px 0; text-align: center; border-radius: 8px;
+          background: #10171e; border: 1px solid var(--line); color: var(--dim);
+          font-size: 12px; }
+  .step .n { display: block; font-size: 16px; font-weight: 700; color: var(--txt); }
+  .step.on { background: #12335c; border-color: var(--blue); color: #9ecbff; }
+  .step.on .n { color: #fff; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .lamp { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+          background: #10171e; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; background: #30363d;
+         flex: 0 0 auto; box-shadow: inset 0 0 0 1px #000; }
+  .dot.on { background: var(--green); box-shadow: 0 0 10px #2ea043aa; }
+  .dot.warn { background: var(--yellow); box-shadow: 0 0 10px #d29922aa; }
+  .foot { padding: 0 22px 22px; color: var(--dim); font-size: 12px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>装袋机 HMI</h1>
+  <span id="badge" class="badge">连接中…</span>
+  <span id="hbwrap" class="badge">心跳 —</span>
+  <span id="stepnow" class="badge">当前步 —</span>
+</header>
+
+<main>
+  <div>
+    <div class="card">
+      <h2>操作</h2>
+      <div class="btnrow">
+        <button class="bigbtn start" data-tag="启动按钮">启动</button>
+        <button class="bigbtn stop" data-tag="急停">急停</button>
+        <button class="bigbtn reset" data-tag="复位按钮">复位</button>
+      </div>
+      <div style="margin-top:14px;color:#8b98a5;font-size:12px">
+        按住 = 置 1，松开 = 置 0（急停/复位平时保持 0）
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h2>使能（10 路）</h2>
+      <div class="grid" id="enables"></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>步序（11 步）</h2>
+      <div class="steps" id="steps"></div>
+      <div style="margin-top:12px;color:#8b98a5;font-size:12px" id="stepnote">
+        步号由位置状态推断（Kepware 里暂无步位 tag）
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h2>位置状态（6 路）</h2>
+      <div class="grid" id="positions"></div>
+    </div>
+  </div>
+</main>
+
+<div class="foot">数据源：Kepware KEPServerEX · OPC UA 127.0.0.1:49320 ·
+  连不上时自动进入 DEMO 演示模式</div>
+
+<script>
+const ENABLES = ['上层使能','主动轮使能','链结使能','切割器使能','挡板使能',
+                 '丝杆使能','送料1使能','送料2使能','吸嘴使能','撑袋器使能'];
+const POSITIONS = ['挡板位置状态','丝杆位置状态','送料1位置状态','送料2位置状态',
+                   '吸嘴位置状态','撑袋器位置状态'];
+
+function renderLamps(container, names) {
+  container.innerHTML = names.map(n =>
+    `<div class="lamp"><span class="dot" id="dot-${n}"></span><span>${n}</span></div>`).join('');
+}
+renderLamps(document.getElementById('enables'), ENABLES);
+renderLamps(document.getElementById('positions'), POSITIONS);
+
+const stepsEl = document.getElementById('steps');
+stepsEl.innerHTML = Array.from({length: 11}, (_, i) =>
+  `<div class="step" id="step-${i+1}"><span class="n">${i+1}</span></div>`).join('');
+
+let holding = {};
+document.querySelectorAll('.bigbtn').forEach(btn => {
+  const tag = btn.dataset.tag;
+  const press = v => fetch(`/api/write?name=${encodeURIComponent(tag)}&value=${v ? 1 : 0}`, {method:'POST'});
+  btn.addEventListener('mousedown', e => { e.preventDefault(); holding[tag] = true; press(1); });
+  btn.addEventListener('mouseup',   e => { e.preventDefault(); if (holding[tag]) { holding[tag] = false; press(0); } });
+  btn.addEventListener('mouseleave',e => { if (holding[tag]) { holding[tag] = false; press(0); } });
+  btn.addEventListener('touchstart',e => { e.preventDefault(); holding[tag] = true; press(1); }, {passive:false});
+  btn.addEventListener('touchend',  e => { e.preventDefault(); if (holding[tag]) { holding[tag] = false; press(0); } });
+});
+
+function inferStep(v) {
+  if (v['挡板位置状态'] && !v['丝杆位置状态'] && !v['吸嘴位置状态'] && !v['撑袋器位置状态']) return 2;
+  if (v['挡板位置状态'] && !v['丝杆位置状态'] && v['吸嘴位置状态'] && !v['撑袋器位置状态']) return 3;
+  if (v['挡板位置状态'] && !v['丝杆位置状态'] && v['撑袋器位置状态'] && v['送料1位置状态']) return '4/5/8?';
+  if (v['挡板位置状态'] && !v['丝杆位置状态'] && v['撑袋器位置状态'] && !v['送料1位置状态']) return '6/7';
+  if (v['挡板位置状态'] && v['撑袋器位置状态'] && v['丝杆位置状态']) return '10';
+  if (!v['挡板位置状态'] && v['丝杆位置状态'] && v['撑袋器位置状态']) return '11';
+  if (!v['挡板位置状态'] && v['丝杆位置状态']) return '1';
+  return '—';
+}
+
+async function tick() {
+  try {
+    const r = await fetch('/api/state');
+    const s = await r.json();
+    const badge = document.getElementById('badge');
+    if (s.connected) { badge.className = 'badge ok'; badge.textContent = '已连接 Kepware（' + s.tags_found + ' 个 tag）'; }
+    else if (s.demo) { badge.className = 'badge demo'; badge.textContent = 'DEMO 演示模式（未连 PLC）'; }
+    else { badge.className = 'badge err'; badge.textContent = '未连接：' + (s.error || ''); }
+
+    const v = s.values || {};
+    document.querySelectorAll('.lamp .dot').forEach(d => {
+      const name = d.id.replace('dot-', '');
+      const on = !!v[name];
+      d.className = 'dot' + (on ? ' on' : '');
+    });
+
+    const hb = document.getElementById('hbwrap');
+    hb.textContent = '心跳 ' + (v['心跳'] ? '●' : '○');
+    hb.className = 'badge ' + (v['心跳'] ? 'ok' : '');
+
+    const step = v['_step'] || inferStep(v);
+    document.getElementById('stepnow').textContent = '当前步 ' + step;
+    for (let i = 1; i <= 11; i++) {
+      const el = document.getElementById('step-' + i);
+      el.className = 'step' + (String(step) === String(i) ? ' on' : '');
+    }
+  } catch (e) {
+    const badge = document.getElementById('badge');
+    badge.className = 'badge err';
+    badge.textContent = '无法连接后端';
+  }
+  setTimeout(tick, 400);
+}
+tick();
+</script>
+</body>
+</html>
